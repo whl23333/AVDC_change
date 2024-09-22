@@ -1,31 +1,47 @@
-from goal_diffusion import GoalGaussianDiffusion, Trainer, ActionDecoder, ConditionModel, DiffusionActionModel, SimpleActionDecoder
+from goal_diffusion import GoalGaussianDiffusion, Trainer, ActionDecoder, ConditionModel, Preprocess, DiffusionActionModel, SimpleActionDecoder, PretrainDecoder, DiffusionActionModelWithGPT, DiffusionActionModelWithGPT2
 from unet import UnetMW as Unet
 from unet import NewUnetMW as NewUnet
 from transformers import CLIPTextModel, CLIPTokenizer
-from datasets import SequentialDatasetv2
+from datasets import SequentialDatasetv2, SequentialDatasetv2SameInterval
 from torch.utils.data import Subset
 import argparse
 from ImgTextPerceiver import ImgTextPerceiverModel, ConvImgTextPerceiverModel, TwoStagePerceiverModel
 from torchvision import utils
+import os
+import yaml
 def main(args):
-    valid_n = 1
-    sample_per_seq = 8
+    current_dir = os.path.dirname(__file__)
+    config_path = os.path.join(current_dir, '../configs/config.yaml')
+    with open(config_path, "r") as file:
+        cfg = yaml.safe_load(file)
+    valid_n = cfg["valid_n"]
+    sample_per_seq = cfg["sample_per_seq"]
     target_size = (128, 128)
 
     if args.mode == 'inference':
         train_set = valid_set = [None] # dummy
     else:
-        train_set = SequentialDatasetv2(
+        # train_set = SequentialDatasetv2(
+        #     sample_per_seq=sample_per_seq, 
+        #     path="/media/disk3/WHL/flowdiffusion/datasets/metaworld", 
+        #     target_size=target_size,
+        #     randomcrop=True
+        # )
+
+        train_set = SequentialDatasetv2SameInterval(
             sample_per_seq=sample_per_seq, 
             path="/media/disk3/WHL/flowdiffusion/datasets/metaworld", 
             target_size=target_size,
+            frameskip=cfg["frameskip"],
             randomcrop=True
         )
         valid_inds = [i for i in range(0, len(train_set), len(train_set)//valid_n)][:valid_n]
         valid_set = Subset(train_set, valid_inds)
 
-    unet = Unet()
-    newunet = NewUnet()
+    unet = Unet(
+        action_channels=512
+    )
+    new_unet = NewUnet()
 
     pretrained_model = "openai/clip-vit-base-patch32"
     tokenizer = CLIPTokenizer.from_pretrained(pretrained_model)
@@ -33,6 +49,7 @@ def main(args):
     text_encoder.requires_grad_(False)
     text_encoder.eval()
 
+    # diffusion
     diffusion = GoalGaussianDiffusion(
         channels=3*(sample_per_seq-1),
         model=unet,
@@ -44,178 +61,82 @@ def main(args):
         beta_schedule = 'cosine',
         min_snr_loss_weight = True,
     )
-
-    diffusion3 = GoalGaussianDiffusion(
-        channels=3*(sample_per_seq-1),
-        model=newunet,
-        image_size=target_size,
-        timesteps=100,
-        sampling_timesteps=args.sample_steps,
-        loss_type='l2',
-        objective='pred_v',
-        beta_schedule = 'cosine',
-        min_snr_loss_weight = True,
-    )
-
-    diffusion5 = GoalGaussianDiffusion(
-        channels=3*(sample_per_seq-1),
-        model=newunet,
-        image_size=target_size,
-        timesteps=100,
-        sampling_timesteps=args.sample_steps,
-        loss_type='l2',
-        objective='pred_v',
-        beta_schedule = 'cosine',
-        min_snr_loss_weight = True,
-    )
-
-    implicit_model = ImgTextPerceiverModel(
-        num_freq_bands = 6,
-        depth = 6,
-        max_freq = 10.,
-        img_input_channels = 3,
-        img_input_axis = 2,
-        text_input_channels = 512,
-        text_input_axis = 1,
-        num_latents = 7,
-        latent_dim = 16,
-    )
     
-    implicit_model3 = ConvImgTextPerceiverModel(
-        num_freq_bands = 6,
-        depth = 6,
-        max_freq = 10.,
-        first_img_channels = 3,
-        img_input_channels = 64,
-        img_input_axis = 2,
-        text_input_channels = 512,
-        text_input_axis = 1,
-        num_latents = 7,
-        latent_dim = 16,
+    diffusion_new = GoalGaussianDiffusion(
+        channels=3*(sample_per_seq-1),
+        model=new_unet,
+        image_size=target_size,
+        timesteps=100,
+        sampling_timesteps=args.sample_steps,
+        loss_type='l2',
+        objective='pred_v',
+        beta_schedule = 'cosine',
+        min_snr_loss_weight = True,
     )
+    # implicit_model
+    model_name = cfg["models"]["implicit_model"]["model_name"]
+    model_params = cfg["models"]["implicit_model"]["params"]
+    class_ = globals()[model_name]
+    implicit_model = class_(**model_params)
+    
+    # action_decoder
+    model_name = cfg["models"]["action_decoder"]["model_name"]
+    model_params = cfg["models"]["action_decoder"]["params"]
+    class_ = globals()[model_name]
+    action_decoder = class_(**model_params)
 
-    implicit_model7 = TwoStagePerceiverModel(
-        num_freq_bands = 6,
-        depth = 6,
-        max_freq = 10.,
-        first_img_channels = 3,
-        img_input_channels = 64,
-        img_input_axis = 2,
-        text_input_channels = 512,
-        text_input_axis = 1,
-        num_latents = 7,
-        latent_dim = 16,
-    )
-
-
-
-    action_decoder = ActionDecoder(action_dim = 4, hidden_dim = 16)
-
-    action_decoder3 = SimpleActionDecoder(action_dim = 4, hidden_dim = 16)
-
-
+    # condition_model
     condition_model = ConditionModel()
 
-    diffusion_action_model = DiffusionActionModel(
+    # preprocess
+    model_name = cfg["models"]["preprocess"]["model_name"]
+    model_params = cfg["models"]["preprocess"]["params"]
+    class_ = globals()[model_name]
+    preprocess = class_(**model_params)
+
+    # 冻结参数
+    if cfg["freeze"]["implicit_model"]:
+        implicit_model.requires_grad_(False)
+        implicit_model.eval()
+    
+    if cfg["freeze"]["action_decoder"]:
+        action_decoder.requires_grad_(False)
+        action_decoder.eval()
+
+    if cfg["freeze"]["diffusion"]:
+        diffusion.requires_grad_(False)
+        diffusion.eval()
+
+    diffusion_action_model11 = DiffusionActionModel(
         diffusion,
         implicit_model,
         action_decoder,
         condition_model,
-        0.5,
+        preprocess,
+        action_rate = cfg["models"]["diffusion_action_model"]["params"]["action_rate"],
     )
 
-    diffusion_action_model3 = DiffusionActionModel(
-        diffusion3,
-        implicit_model3,
-        action_decoder3,
-        condition_model,
-        0.5,
-    )
-    
-    diffusion_action_model5 = DiffusionActionModel(
-        diffusion,
-        implicit_model3,
-        action_decoder3,
-        condition_model,
-        0.0,
-    )
-
-    # 冻结部分参数
-
-    # implicit_model3.requires_grad_(False)
-    # implicit_model3.eval()
-
-    # action_decoder.requires_grad_(False)
-    # action_decoder.eval()
-
-    # action_decoder3.requires_grad_(False)
-    # action_decoder3.eval()
-
-    diffusion.requires_grad_(False)
-    diffusion.eval()
-
-    # implicit_model7.requires_grad_(False)
-    # implicit_model7.eval()
-
-    diffusion_action_model6 = DiffusionActionModel(
-        diffusion,
-        implicit_model3,
+    diffusion_action_model_gpt = DiffusionActionModelWithGPT(
+        diffusion_new,
         action_decoder,
         condition_model,
-        0.0,
+        action_rate = cfg["models"]["diffusion_action_model"]["params"]["action_rate"],
+        n_layer = 12,
+        n_head = 4
     )
 
-    diffusion_action_model7 = DiffusionActionModel(
+    diffusion_action_model_gpt2 = DiffusionActionModelWithGPT2(
         diffusion,
-        implicit_model7,
         action_decoder,
         condition_model,
-        1.0,
-    )
-
-
-    # trainer = Trainer(
-    #     diffusion_action_model=diffusion_action_model6,
-    #     tokenizer=tokenizer, 
-    #     text_encoder=text_encoder,
-    #     train_set=train_set,
-    #     valid_set=valid_set,
-    #     train_lr=1e-4,
-    #     train_num_steps = 240000,
-    #     save_and_sample_every = 2000,
-    #     ema_update_every = 10,
-    #     ema_decay = 0.999,
-    #     train_batch_size = 3,
-    #     valid_batch_size =32,
-    #     gradient_accumulate_every = 1,
-    #     num_samples=valid_n, 
-    #     results_folder ='../results6/mw',
-    #     fp16 =True,
-    #     amp=True,
-    # )
-
-    trainer = Trainer(
-        diffusion_action_model=diffusion_action_model7,
-        tokenizer=tokenizer, 
-        text_encoder=text_encoder,
-        train_set=train_set,
-        valid_set=valid_set,
-        train_lr=1e-4,
-        train_num_steps = 240000,
-        save_and_sample_every = 10000,
-        ema_update_every = 10,
-        ema_decay = 0.999,
-        train_batch_size = 4,
-        valid_batch_size =32,
-        gradient_accumulate_every = 1,
-        num_samples=valid_n, 
-        results_folder ='../result10/mw',
-        fp16 =True,
-        amp=True,
+        action_rate = cfg["models"]["diffusion_action_model"]["params"]["action_rate"],
+        n_layer = 12,
+        n_head = 4,
+        img_len = 1
     )
 
     # trainer = Trainer(
-    #     diffusion_action_model=diffusion_action_model7,
+    #     diffusion_action_model=diffusion_action_model11,
     #     tokenizer=tokenizer, 
     #     text_encoder=text_encoder,
     #     train_set=train_set,
@@ -225,14 +146,34 @@ def main(args):
     #     save_and_sample_every = 10000,
     #     ema_update_every = 10,
     #     ema_decay = 0.999,
-    #     train_batch_size = 3,
+    #     train_batch_size = cfg["trainer"]["train_batch_size"],
     #     valid_batch_size =32,
     #     gradient_accumulate_every = 1,
     #     num_samples=valid_n, 
-    #     results_folder ='../results8/mw',
+    #     results_folder =cfg["trainer"]["results_folder"],
     #     fp16 =True,
     #     amp=True,
     # )
+
+    trainer = Trainer(
+        diffusion_action_model=diffusion_action_model_gpt2,
+        tokenizer=tokenizer, 
+        text_encoder=text_encoder,
+        train_set=train_set,
+        valid_set=valid_set,
+        train_lr=1e-4,
+        train_num_steps = 240000,
+        save_and_sample_every = 10000,
+        ema_update_every = 10,
+        ema_decay = 0.999,
+        train_batch_size = cfg["trainer"]["train_batch_size"],
+        valid_batch_size =32,
+        gradient_accumulate_every = 1,
+        num_samples=valid_n, 
+        results_folder =cfg["trainer"]["results_folder"],
+        fp16 =True,
+        amp=True,
+    )
 
     if args.checkpoint_num is not None:
         trainer.load_resume(args.checkpoint_num) # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!

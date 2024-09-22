@@ -1187,11 +1187,11 @@ class NewUNetModel(nn.Module):
             self.num_classes is not None or self.task_tokens
         ), "must specify y if and only if the model is class-conditional"
 
-        assert (y.shape[2]) == (self.action_channels), "action must have the same channel with action_channels in UnetModel"
+        # assert (y.shape[2]) == (self.action_channels), "action must have the same channel with action_channels in UnetModel"
         
-        y = rearrange(y, "b l c -> b (l c)")
+        # y = rearrange(y, "b l c -> b (l c)")
 
-        y = self.action_Linear(y)
+        # y = self.action_Linear(y)
 
         hs = []
         emb = self.time_embed(timestep_embedding(timesteps, self.model_channels)) # timestep_embedding(timesteps, 128) -> (batch, 128) -> (batch, 512)

@@ -1,0 +1,20 @@
+Preparing dataset...
+Done
+
+
+
+
+  0%|                                                                                            | 21/30000 [00:11<4:35:51,  1.81it/s]
+Traceback (most recent call last):
+  File "/home/hlwang/AVDC_change/flowdiffusion/pretrain.py", line 100, in <module>
+    main(cfg)
+  File "/home/hlwang/AVDC_change/flowdiffusion/pretrain.py", line 75, in main
+    x, x_cond, goal, action = next(dl)
+  File "/home/hlwang/AVDC_change/flowdiffusion/pretrain.py", line 24, in cycle
+    for data in dl:
+  File "/home/hlwang/miniconda3/envs/env/lib/python3.9/site-packages/torch/utils/data/dataloader.py", line 631, in __next__
+    data = self._next_data()
+  File "/home/hlwang/miniconda3/envs/env/lib/python3.9/site-packages/torch/utils/data/dataloader.py", line 1329, in _next_data
+    idx, data = self._get_data()
+  File "/home/hlwang/miniconda3/envs/env/lib/python3.9/site-packages/torch/utils/data/dataloader.py", line 1285, in _get_data
+    success, data = self._try_get_data()

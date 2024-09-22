@@ -37,7 +37,7 @@ class UnetBridge(nn.Module):
         return rearrange(out, 'b c f h w -> b (f c) h w')
 
 class UnetMW(nn.Module):
-    def __init__(self):
+    def __init__(self, action_channels=512):
         super(UnetMW, self).__init__()
         self.unet = UNetModel(
             image_size=(128, 128),
@@ -56,7 +56,7 @@ class UnetMW(nn.Module):
             use_checkpoint=False,
             use_fp16=False,
             num_head_channels=32,
-            action_channels = 16
+            action_channels = action_channels
         )
     def forward(self, x, t, task_embed=None, **kwargs): # x.shape: (b, (f+1 c), h, w)
         f = x.shape[1] // 3 - 1 

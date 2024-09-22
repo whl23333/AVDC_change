@@ -38,6 +38,15 @@ import os
 
 from pynvml import *
 
+from vector_quantize_pytorch import ResidualVQ
+import yaml
+from vqvae.vqvae import EncoderMLP
+import einops
+from torch.nn.parallel import DistributedDataParallel as DDP
+from img_encoder import Encoder
+from transformers import GPT2Model
+from transformers import GPT2Config
+
 def print_gpu_utilization():
     nvmlInit()
     handle = nvmlDeviceGetHandleByIndex(0)
@@ -1142,6 +1151,43 @@ class ActionDecoder(nn.Module):
             raise NotImplementedError()
         '''
         return action_predict
+
+class PretrainDecoder(nn.Module):
+    def __init__(self, dir = "results", device = 'cuda'):
+        super(PretrainDecoder, self).__init__()
+        current_dir = os.path.dirname(__file__)
+        config_path = os.path.join(current_dir, '../configs/config.yaml')
+        with open(config_path, "r") as file:
+            cfg = yaml.safe_load(file)
+        dir = os.path.join(current_dir, dir)
+        data = torch.load(os.path.join(dir, 'trained_vqvae.pt'), map_location=device)
+        self.n_latent_dims = cfg["vqvae"]["n_latent_dims"]
+        self.vq_layer = ResidualVQ(
+            dim=cfg["vqvae"]["n_latent_dims"],
+            num_quantizers=cfg["vqvae"]["vqvae_groups"],
+            codebook_size=cfg["vqvae"]["vqvae_n_embed"],
+        ).to(device)
+        self.vq_layer.load_state_dict(data["vq_embedding"])
+        self.vq_layer.eval()
+        if cfg["vqvae"]["action_window_size"] == 1:
+            self.decoder = EncoderMLP(
+                input_dim=cfg["vqvae"]["n_latent_dims"], output_dim=cfg["vqvae"]["act_dim"]
+            ).to(device)
+        else:
+            self.decoder = EncoderMLP(
+                input_dim=cfg["vqvae"]["n_latent_dims"], output_dim=cfg["vqvae"]["act_dim"] * cfg["vqvae"]["action_window_size"]
+            ).to(device)
+        self.decoder.load_state_dict(data["decoder"])
+    
+    def forward(self, z):
+        assert z.shape[1] == self.n_latent_dims, "the dim of z must be equal to PretrainDecoder's n_latent_dims"
+        z_shape = z.shape[:-1]
+        z_flat = z.view(z.size(0), -1, z.size(1))
+        z_flat, vq_code, vq_loss_state = self.vq_layer(z_flat)
+        z_vq = z_flat.view(*z_shape, -1)
+        dec_out = self.decoder(z + (z_vq - z).detach())
+        return dec_out
+        
 class SimpleActionDecoder(nn.Module):
     def __init__(self, action_dim, hidden_dim):
         super(SimpleActionDecoder, self).__init__()
@@ -1173,6 +1219,24 @@ class ConditionModel(nn.Module):
     def forward(self, x):
         return x
 
+class Preprocess(nn.Module):
+    def __init__(self, hidden_dim = 16, act_len = 7, n_latent_dims = 512):
+        super(Preprocess, self).__init__()
+        self.layer = nn.Sequential(
+            nn.Linear(hidden_dim * act_len, n_latent_dims),
+            nn.ReLU(),
+            nn.Linear(n_latent_dims, n_latent_dims),
+        )
+        self.batch_norm = torch.nn.BatchNorm1d(
+            num_features = n_latent_dims
+        )
+    
+    def forward(self, x):
+        x = einops.rearrange(x, "N T A -> N (T A)")
+        x = self.layer(x)
+        x = self.batch_norm(x)
+        return x
+
 class DiffusionActionModel(nn.Module):
     def __init__(
         self,
@@ -1180,9 +1244,11 @@ class DiffusionActionModel(nn.Module):
         implicit_model,
         action_decoder,
         condition_model,
-        action_rate,
-        action_loss_type = "l1",
+        preprocess,
+        action_rate = 0.5,
+        action_loss_type = "l2",
         action_features = 16,
+        action_scale = 10.0,
     ):
         super().__init__()
         self.action_features = action_features
@@ -1195,24 +1261,34 @@ class DiffusionActionModel(nn.Module):
         self.batch_norm = torch.nn.BatchNorm1d(
             num_features = action_features
         )
+        self.action_scale = action_scale
+        self.preprocess = preprocess
+
 
 
     def forward(self, img, img_cond, task_embed, action):
-        assert self.action_features == self.action_decoder.hidden_dim, "action dim should be same in DiffusionActionmodel, action decoder"
+        # print("img_cond:", img_cond.shape)
+        # print("task_embed:", task_embed.shape)
         z = self.implicit_model(img_cond.permute(0,2,3,1), task_embed) # (batch, (f+1)=8, hidden_dim), action大约36维, 或者直接生成（batch，512）
         z = self.batch_norm(z.permute(0,2,1))
         z = z.permute(0,2,1)
-        action_predict = self.action_decoder(z) 
+        # print("z:",z.shape)
+        state = self.preprocess(z)
+        # print("state:", state.shape)
+        action_predict = self.action_decoder(state) 
         # print("action_predict:",action_predict)
         # print("action:", action)
-        if self.action_loss_type == 'l1':
-            loss1 = F.l1_loss(action_predict, action)
-        elif self.action_loss_type == 'l2':
-            loss1 = F.mse_loss(action_predict, action)
-        elif self.action_loss_type == "huber":
-            loss1 = F.smooth_l1_loss(action_predict, action)
-        else:
-            raise NotImplementedError()
+        action = action / self.action_scale
+        action = einops.rearrange(action, "N T A -> N (T A)")
+        # if self.action_loss_type == 'l1':
+        #     loss1 = F.l1_loss(action_predict, action)
+        # elif self.action_loss_type == 'l2':
+        #     loss1 = F.mse_loss(action_predict, action)
+        # elif self.action_loss_type == "huber":
+        #     loss1 = F.smooth_l1_loss(action_predict, action)
+        # else:
+        #     raise NotImplementedError()
+        loss1 = (action - action_predict).abs().mean()
         condition = self.condition_model(z)
         loss2 = self.goal_gaussian_diffusion(img, img_cond, condition)
         loss = self.action_rate*loss1 + (1 - self.action_rate)*loss2
@@ -1221,6 +1297,178 @@ class DiffusionActionModel(nn.Module):
     @torch.no_grad()
     def sample(self, x_cond, task_embed, batch_size = 16, return_all_timesteps = False, guidance_weight=0):
         z = self.implicit_model(x_cond.permute(0,2,3,1), task_embed)
+        condition = self.condition_model(z)
+        return self.goal_gaussian_diffusion.sample(x_cond, condition, batch_size, return_all_timesteps, guidance_weight)
+
+class DiffusionActionModelWithGPT(nn.Module):
+    def __init__(
+        self,
+        goal_gaussian_diffusion,
+        action_decoder,
+        condition_model,
+        action_rate = 0.5,
+        action_loss_type = "l2",
+        action_features = 512,
+        action_scale = 10.0,
+        n_layer = 12,
+        n_head = 4
+    ):
+        super().__init__()
+        self.action_features = action_features
+        self.goal_gaussian_diffusion = goal_gaussian_diffusion
+        self.action_decoder = action_decoder
+        self.condition_model = condition_model
+        self.action_rate = action_rate
+        self.action_loss_type = action_loss_type
+        self.batch_norm = torch.nn.BatchNorm1d(
+            num_features = action_features
+        )
+        self.action_scale = action_scale
+        self.img_encoder = Encoder(
+            hidden_size = action_features,
+            activation_function = "relu",
+            ch = 3,
+            robot = False
+        )
+        self.gpt_config = GPT2Config(
+            vocab_size = 1,
+            n_embd = action_features,
+            n_layer = n_layer,
+            n_head = n_head
+        )
+        self.gpt_model = GPT2Model(self.gpt_config)
+
+
+
+    def forward(self, img, img_cond, task_embed, action):
+        
+        assert  self.action_features == task_embed.shape[-1], "action_features must be equal to task_embed"
+        img_input = self.img_encoder(img_cond)
+        if len(img_input.shape)<3:
+            img_input = torch.unsqueeze(img_input, dim = 1)
+        stacked_input = torch.cat([task_embed, img_input], dim = 1)
+        output = self.gpt_model(inputs_embeds = stacked_input)
+        z = output["last_hidden_state"][:, -1, :] #先只用最后一个hidden，先不考虑循环输出，z[batch, hidden_dim]
+        z = self.batch_norm(z)
+        action_predict = self.action_decoder(z) 
+        action = action / self.action_scale
+        action = einops.rearrange(action, "N T A -> N (T A)")
+        # print("action_predict:",action_predict)
+        # print("action:", action)
+        # if self.action_loss_type == 'l1':
+        #     loss1 = F.l1_loss(action_predict, action)
+        # elif self.action_loss_type == 'l2':
+        #     loss1 = F.mse_loss(action_predict, action)
+        # elif self.action_loss_type == "huber":
+        #     loss1 = F.smooth_l1_loss(action_predict, action)
+        # else:
+        #     raise NotImplementedError()
+        loss1 = (action - action_predict).abs().mean()
+        condition = self.condition_model(z)
+        loss2 = self.goal_gaussian_diffusion(img, img_cond, condition)
+        loss = self.action_rate*loss1 + (1 - self.action_rate)*loss2
+        return loss, loss1, loss2
+    
+    @torch.no_grad()
+    def sample(self, x_cond, task_embed, batch_size = 16, return_all_timesteps = False, guidance_weight=0):
+        assert  self.action_features == task_embed.shape[-1], "action_features must be equal to task_embed"
+        img_input = self.img_encoder(x_cond)
+        if len(img_input.shape)<3:
+            img_input = torch.unsqueeze(img_input, dim = 1)
+        stacked_input = torch.cat([task_embed, img_input], dim = 1)
+        output = self.gpt_model(inputs_embeds = stacked_input)
+        z = output["last_hidden_state"][:, -1, :] #先只用最后一个hidden，先不考虑循环输出，z[batch, hidden_dim]
+        self.batch_norm.eval()
+        z = self.batch_norm(z)
+        condition = self.condition_model(z)
+        return self.goal_gaussian_diffusion.sample(x_cond, condition, batch_size, return_all_timesteps, guidance_weight)
+
+class DiffusionActionModelWithGPT2(nn.Module):
+    def __init__(
+        self,
+        goal_gaussian_diffusion,
+        action_decoder,
+        condition_model,
+        action_rate = 0.5,
+        action_loss_type = "l2",
+        action_features = 512,
+        action_scale = 10.0,
+        n_layer = 12,
+        n_head = 4,
+        img_len = 1
+    ):
+        super().__init__()
+        self.action_features = action_features
+        self.goal_gaussian_diffusion = goal_gaussian_diffusion
+        self.action_decoder = action_decoder
+        self.condition_model = condition_model
+        self.action_rate = action_rate
+        self.action_loss_type = action_loss_type
+        self.batch_norm = torch.nn.BatchNorm1d(
+            num_features = action_features
+        )
+        self.action_scale = action_scale
+        self.img_encoder = Encoder(
+            hidden_size = action_features,
+            activation_function = "relu",
+            ch = 3,
+            robot = False
+        )
+        self.gpt_config = GPT2Config(
+            vocab_size = 1,
+            n_embd = action_features,
+            n_layer = n_layer,
+            n_head = n_head
+        )
+        self.gpt_model = GPT2Model(self.gpt_config)
+        self.img_len = img_len
+
+
+
+    def forward(self, img, img_cond, task_embed, action):
+        
+        assert  self.action_features == task_embed.shape[-1], "action_features must be equal to task_embed"
+        img_input = self.img_encoder(img_cond)
+        if len(img_input.shape)<3:
+            img_input = torch.unsqueeze(img_input, dim = 1)
+        assert self.img_len == img_input.shape[1]
+        stacked_input = torch.cat([task_embed, img_input], dim = 1)
+        output = self.gpt_model(inputs_embeds = stacked_input)
+        z = output["last_hidden_state"][:, self.img_len:, :] #z[batch, text_len, hidden_dim]
+        z = self.batch_norm(z.permute(0,2,1))
+        z = z.permute(0,2,1)
+        action_predict = self.action_decoder(z[:, -1, :]) 
+        # print("action_predict:",action_predict)
+        # print("action:", action)
+        action = action / self.action_scale
+        action = einops.rearrange(action, "N T A -> N (T A)")
+        # if self.action_loss_type == 'l1':
+        #     loss1 = F.l1_loss(action_predict, action)
+        # elif self.action_loss_type == 'l2':
+        #     loss1 = F.mse_loss(action_predict, action)
+        # elif self.action_loss_type == "huber":
+        #     loss1 = F.smooth_l1_loss(action_predict, action)
+        # else:
+        #     raise NotImplementedError()
+        loss1 = (action - action_predict).abs().mean()
+        condition = self.condition_model(z)
+        loss2 = self.goal_gaussian_diffusion(img, img_cond, condition)
+        loss = self.action_rate*loss1 + (1 - self.action_rate)*loss2
+        return loss, loss1, loss2
+    
+    @torch.no_grad()
+    def sample(self, x_cond, task_embed, batch_size = 16, return_all_timesteps = False, guidance_weight=0):
+        assert  self.action_features == task_embed.shape[-1], "action_features must be equal to task_embed"
+        img_input = self.img_encoder(x_cond)
+        if len(img_input.shape)<3:
+            img_input = torch.unsqueeze(img_input, dim = 1)
+        assert self.img_len == img_input.shape[1]
+        stacked_input = torch.cat([task_embed, img_input], dim = 1)
+        output = self.gpt_model(inputs_embeds = stacked_input)
+        z = output["last_hidden_state"][:, self.img_len, :]
+        self.batch_norm.eval()
+        z = self.batch_norm(z.permute(0,2,1))
+        z = z.permute(0,2,1)
         condition = self.condition_model(z)
         return self.goal_gaussian_diffusion.sample(x_cond, condition, batch_size, return_all_timesteps, guidance_weight)
 
@@ -1337,6 +1585,12 @@ class Trainer(object):
         # step counter state
 
         self.step = 0
+
+        # Wrap the model with DDP and set find_unused_parameters=True
+        
+        if self.accelerator.distributed_type == "MULTI_GPU":
+            self.model = self.model.to("cuda")
+            self.model = DDP(self.model, device_ids=[self.accelerator.local_process_index], find_unused_parameters=True)
 
         # prepare model, dataloader, optimizer with accelerator
 
@@ -1462,6 +1716,12 @@ class Trainer(object):
                         self.accelerator.backward(loss)
                 
                 model = self.accelerator.unwrap_model(self.model)
+                # params = []
+                # names = []
+                # for name, param in model.implicit_model.named_parameters():
+                #     params.append(param.grad)
+                #     names.append(name)
+                # print(params)
 
                 loss_list.append(total_loss)
                 loss1_list.append(total_loss1)

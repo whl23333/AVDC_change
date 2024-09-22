@@ -1,0 +1,1 @@
+{"pretrain/n_different_codes": 16, "_timestamp": 1725711713.1749015, "_runtime": 14.02119755744934, "_step": 104, "pretrain/n_different_combinations": 28, "pretrain/encoder_loss": 0.6707169413566589, "pretrain/vq_loss_state": 0.3340691328048706, "pretrain/vqvae_recon_loss": 1.936062216758728, "_wandb": {"runtime": 13}}

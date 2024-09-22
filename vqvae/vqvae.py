@@ -193,6 +193,8 @@ class VqVae:
         rep_loss.backward()
         self.vqvae_optimizer.step()
         vqvae_recon_loss = torch.nn.MSELoss()(state, dec_out)
+        print("dec_out in vqvae.py:", dec_out)
+        print("state in vqvae.py:", state)
         return (
             encoder_loss.clone().detach(),
             vq_loss_state.clone().detach(),

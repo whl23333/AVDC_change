@@ -1,0 +1,21 @@
+Preparing dataset...
+Done
+  0%|                                                                                              | 0/30000 [00:00<?, ?it/s]
+> /home/hlwang/AVDC_change/flowdiffusion/vqvae/vqvae.py(181)vqvae_update()
+-> state_rep_flat = state_rep.view(state_rep.size(0), -1, state_rep.size(1))
+torch.Size([64, 512])
+  0%|                                                                                              | 0/30000 [00:32<?, ?it/s]
+Traceback (most recent call last):
+  File "/home/hlwang/AVDC_change/flowdiffusion/pretrain.py", line 92, in <module>
+    main(cfg)
+  File "/home/hlwang/AVDC_change/flowdiffusion/pretrain.py", line 75, in main
+    ) = vqvae_model.vqvae_update(action)  # N T D
+  File "/home/hlwang/AVDC_change/flowdiffusion/vqvae/vqvae.py", line 181, in vqvae_update
+    state_rep_flat = state_rep.view(state_rep.size(0), -1, state_rep.size(1))
+  File "/home/hlwang/AVDC_change/flowdiffusion/vqvae/vqvae.py", line 181, in vqvae_update
+    state_rep_flat = state_rep.view(state_rep.size(0), -1, state_rep.size(1))
+  File "/home/hlwang/miniconda3/envs/env/lib/python3.9/bdb.py", line 88, in trace_dispatch
+    return self.dispatch_line(frame)
+  File "/home/hlwang/miniconda3/envs/env/lib/python3.9/bdb.py", line 113, in dispatch_line
+    if self.quitting: raise BdbQuit
+bdb.BdbQuit

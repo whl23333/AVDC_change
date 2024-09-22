@@ -1,33 +1,32 @@
-import pandas as pd
-import os
+from transformers import GPT2Model
+from transformers import GPT2Config
 import torch
-import numpy as np
-from datasets import accumulate
-from einops import rearrange
-import matplotlib.pyplot as plt
-data = pd.read_pickle("/media/disk3/WHL/flowdiffusion/datasets/metaworld/metaworld_dataset/hammer/corner/000/action.pkl")
-d = accumulate(data[0])
-x = [i[0] for i in d]
-y = [i[1] for i in d]
-z = [i[2] for i in d]
-grab = [i[3] for i in d]
+from torch.optim import Adam
+import torch.nn.functional as F
+from img_encoder import Encoder
+from torch import nn
 
-t = range(len(x))
-# plt.figure()
-# plt.plot(t, x)
-# plt.savefig("/home/hlwang/AVDC_change/flowdiffusion/x_plot.png")
-# plt.figure()
-# plt.plot(t, y)
-# plt.savefig("/home/hlwang/AVDC_change/flowdiffusion/y_plot.png")
-# plt.figure()
-# plt.plot(t, z)
-# plt.savefig("/home/hlwang/AVDC_change/flowdiffusion/z_plot.png")
-# plt.figure()
-# plt.plot(t, grab)
-# plt.savefig("/home/hlwang/AVDC_change/flowdiffusion/grab_plot.png")
-# print("hi")
 
-t = [1,2,3,4]
-a, b, *c = t
-print(a)
-print(b)
+
+class ActionGenerateModel(nn.Module):
+    def __init__(self, config: GPT2Config):
+        super(ActionGenerateModel, self).__init__()
+        self.gpt2 = GPT2Model(config)
+        self.linear = nn.Linear(config.hidden_size, config.hidden_size)
+    
+    def forward(self, input_embeds, attention_mask = None):
+        outputs = self.gpt2(inputs_embeds = input_embeds, attention_mask = attention_mask)
+        next_token_embed = self.linear(outputs.last_hidden_state)
+        return next_token_embed
+
+    def generate(self, input_embeds, act_len, attention_mask = None):
+        generated_embeddings = []
+        for _ in range(act_len):
+            outputs = self.gpt2(inputs_embeds = input_embeds, attention_mask = attention_mask)
+            next_token_embed = self.linear(outputs.last_hidden_state[:, -1, :])
+            input_embeds = torch.cat((input_embeds, next_token_embed.unsqueeze(1)), dim = 1)
+            generated_embeddings.append(next_token_embed)
+        return torch.stack(generated_embeddings, dim = 1)
+
+n = [1,2,3,4,5]
+print(n[-2])

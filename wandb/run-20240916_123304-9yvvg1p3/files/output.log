@@ -1,0 +1,10 @@
+Preparing dataset...
+Done
+Traceback (most recent call last):
+  File "/home/hlwang/AVDC_change/flowdiffusion/action_test.py", line 92, in <module>
+    main(cfg)
+  File "/home/hlwang/AVDC_change/flowdiffusion/action_test.py", line 73, in main
+    vqvae_model.load_state_dict(os.path.join(save_path, "trained_vqvae.pt"))
+  File "/home/hlwang/AVDC_change/flowdiffusion/vqvae/vqvae.py", line 213, in load_state_dict
+    self.encoder.load_state_dict(state_dict["encoder"])
+TypeError: string indices must be integers

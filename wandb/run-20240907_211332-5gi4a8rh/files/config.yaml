@@ -1,0 +1,109 @@
+wandb_version: 1
+
+wandb:
+  desc: null
+  value:
+    wandb_project: AVDC_change_pretrain
+    wandb_entity: whl23333-tsinghua-university
+save_path:
+  desc: null
+  value: ../results12/pretrain
+gpt_save_path:
+  desc: null
+  value: ../results12/gpt
+seed:
+  desc: null
+  value: 42
+sample_per_seq:
+  desc: null
+  value: 8
+valid_n:
+  desc: null
+  value: 1
+batch_size:
+  desc: null
+  value: 64
+train_steps:
+  desc: null
+  value: 30000
+device:
+  desc: null
+  value: cuda
+vqvae:
+  desc: null
+  value:
+    action_window_size: 7
+    act_dim: 4
+    n_latent_dims: 512
+    vqvae_n_embed: 16
+    vqvae_groups: 2
+    act_scale: 10.0
+freeze:
+  desc: null
+  value:
+    implicit_model: false
+    action_decoder: true
+    diffusion: false
+models:
+  desc: null
+  value:
+    implicit_model:
+      model_name: TwoStagePerceiverModel
+      params:
+        num_freq_bands: 6
+        depth: 6
+        max_freq: 10.0
+        first_img_channels: 3
+        img_input_channels: 64
+        img_input_axis: 2
+        text_input_channels: 512
+        text_input_axis: 1
+        num_latents: 7
+        latent_dim: 16
+    action_decoder:
+      model_name: PretrainDecoder
+      params:
+        dir: ../results12/pretrain/fancy-bush-10
+        device: cuda
+    preprocess:
+      model_name: Preprocess
+      params:
+        hidden_dim: 16
+        act_len: 7
+        n_latent_dims: 512
+    diffusion_action_model:
+      params:
+        action_rate: 0.5
+trainer:
+  desc: null
+  value:
+    results_folder: ../result_gpt/mw
+    train_batch_size: 3
+_wandb:
+  desc: null
+  value:
+    python_version: 3.9.19
+    cli_version: 0.17.6
+    framework: torch
+    is_jupyter_run: false
+    is_kaggle_kernel: false
+    start_time: 1725714812
+    t:
+      1:
+      - 1
+      - 41
+      - 51
+      - 55
+      2:
+      - 1
+      - 41
+      - 51
+      - 55
+      3:
+      - 16
+      - 23
+      4: 3.9.19
+      5: 0.17.6
+      8:
+      - 5
+      13: linux-x86_64

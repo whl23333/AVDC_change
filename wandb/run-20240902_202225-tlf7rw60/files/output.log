@@ -1,0 +1,29 @@
+Preparing dataset...
+Done
+  0%|                                                                                                 | 0/30000 [00:01<?, ?it/s]
+Traceback (most recent call last):
+  File "/home/hlwang/AVDC_change/flowdiffusion/pretrain.py", line 99, in <module>
+    main(cfg)
+  File "/home/hlwang/AVDC_change/flowdiffusion/pretrain.py", line 82, in main
+    ) = vqvae_model.vqvae_update(action)  # N T D
+  File "/home/hlwang/AVDC_change/flowdiffusion/vqvae/vqvae.py", line 178, in vqvae_update
+    state_rep = self.encoder(state)
+  File "/home/hlwang/miniconda3/envs/env/lib/python3.9/site-packages/torch/nn/modules/module.py", line 1532, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/hlwang/miniconda3/envs/env/lib/python3.9/site-packages/torch/nn/modules/module.py", line 1541, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/hlwang/AVDC_change/flowdiffusion/vqvae/vqvae.py", line 41, in forward
+    h = self.encoder(x)
+  File "/home/hlwang/miniconda3/envs/env/lib/python3.9/site-packages/torch/nn/modules/module.py", line 1532, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/hlwang/miniconda3/envs/env/lib/python3.9/site-packages/torch/nn/modules/module.py", line 1541, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/hlwang/miniconda3/envs/env/lib/python3.9/site-packages/torch/nn/modules/container.py", line 217, in forward
+    input = module(input)
+  File "/home/hlwang/miniconda3/envs/env/lib/python3.9/site-packages/torch/nn/modules/module.py", line 1532, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/hlwang/miniconda3/envs/env/lib/python3.9/site-packages/torch/nn/modules/module.py", line 1541, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/hlwang/miniconda3/envs/env/lib/python3.9/site-packages/torch/nn/modules/linear.py", line 116, in forward
+    return F.linear(input, self.weight, self.bias)
+RuntimeError: mat1 and mat2 shapes cannot be multiplied (64x32 and 28x128)

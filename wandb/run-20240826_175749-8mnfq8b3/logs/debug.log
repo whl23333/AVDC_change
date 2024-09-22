@@ -1,0 +1,29 @@
+2024-08-26 17:57:49,458 INFO    MainThread:1381763 [wandb_setup.py:_flush():76] Current SDK version is 0.17.6
+2024-08-26 17:57:49,458 INFO    MainThread:1381763 [wandb_setup.py:_flush():76] Configure stats pid to 1381763
+2024-08-26 17:57:49,458 INFO    MainThread:1381763 [wandb_setup.py:_flush():76] Loading settings from /home/hlwang/.config/wandb/settings
+2024-08-26 17:57:49,458 INFO    MainThread:1381763 [wandb_setup.py:_flush():76] Loading settings from /home/hlwang/AVDC_change/flowdiffusion/wandb/settings
+2024-08-26 17:57:49,458 INFO    MainThread:1381763 [wandb_setup.py:_flush():76] Loading settings from environment variables: {}
+2024-08-26 17:57:49,458 INFO    MainThread:1381763 [wandb_setup.py:_flush():76] Applying setup settings: {'_disable_service': False}
+2024-08-26 17:57:49,458 INFO    MainThread:1381763 [wandb_setup.py:_flush():76] Inferring run settings from compute environment: {'program_relpath': 'pretrain.py', 'program_abspath': '/home/hlwang/AVDC_change/flowdiffusion/pretrain.py', 'program': '/home/hlwang/AVDC_change/flowdiffusion/pretrain.py'}
+2024-08-26 17:57:49,458 INFO    MainThread:1381763 [wandb_setup.py:_flush():76] Applying login settings: {}
+2024-08-26 17:57:49,458 INFO    MainThread:1381763 [wandb_init.py:_log_setup():521] Logging user logs to /home/hlwang/AVDC_change/flowdiffusion/wandb/run-20240826_175749-8mnfq8b3/logs/debug.log
+2024-08-26 17:57:49,458 INFO    MainThread:1381763 [wandb_init.py:_log_setup():522] Logging internal logs to /home/hlwang/AVDC_change/flowdiffusion/wandb/run-20240826_175749-8mnfq8b3/logs/debug-internal.log
+2024-08-26 17:57:49,458 INFO    MainThread:1381763 [wandb_init.py:init():559] calling init triggers
+2024-08-26 17:57:49,458 INFO    MainThread:1381763 [wandb_init.py:init():566] wandb.init called with sweep_config: {}
+config: {'wandb': {'wandb_project': 'AVDC_change_pretrain', 'wandb_entity': 'whl23333-tsinghua-university'}, 'save_path': '../results12/pretrain', 'seed': 42, 'sample_per_seq': 8, 'valid_n': 1, 'batch_size': 64, 'train_steps': 30000, 'device': 'cuda', 'vqvae': {'action_window_size': 7, 'act_dim': 4, 'n_latent_dims': 512, 'vqvae_n_embed': 16, 'vqvae_groups': 2, 'act_scale': 10.0}, 'freeze': {'implicit_model': False, 'action_decoder': True, 'diffusion': False}, 'models': {'implicit_model': {'model_name': 'TwoStagePerceiverModel', 'params': {'num_freq_bands': 6, 'depth': 6, 'max_freq': 10.0, 'first_img_channels': 3, 'img_input_channels': 64, 'img_input_axis': 2, 'text_input_channels': 512, 'text_input_axis': 1, 'num_latents': 7, 'latent_dim': 16}}, 'action_decoder': {'model_name': 'PretrainDecoder', 'params': {'dir': '../results12/pretrain/treasured-dream-7', 'device': 'cuda'}}, 'preprocess': {'model_name': 'Preprocess', 'params': {'hidden_dim': 16, 'act_len': 7, 'n_latent_dims': 512}}, 'diffusion_action_model': {'params': {'action_rate': 0.5}}}, 'trainer': {'results_folder': '../result4/mw', 'train_batch_size': 3}}
+2024-08-26 17:57:49,458 INFO    MainThread:1381763 [wandb_init.py:init():609] starting backend
+2024-08-26 17:57:49,458 INFO    MainThread:1381763 [wandb_init.py:init():613] setting up manager
+2024-08-26 17:57:49,461 INFO    MainThread:1381763 [backend.py:_multiprocessing_setup():105] multiprocessing start_methods=fork,spawn,forkserver, using: spawn
+2024-08-26 17:57:49,462 INFO    MainThread:1381763 [wandb_init.py:init():621] backend started and connected
+2024-08-26 17:57:49,476 INFO    MainThread:1381763 [wandb_init.py:init():716] updated telemetry
+2024-08-26 17:57:49,502 INFO    MainThread:1381763 [wandb_init.py:init():749] communicating run to backend with 90.0 second timeout
+2024-08-26 17:57:50,031 INFO    MainThread:1381763 [wandb_run.py:_on_init():2438] communicating current version
+2024-08-26 17:57:50,074 INFO    MainThread:1381763 [wandb_run.py:_on_init():2447] got version response upgrade_message: "wandb version 0.17.7 is available!  To upgrade, please run:\n $ pip install wandb --upgrade"
+
+2024-08-26 17:57:50,075 INFO    MainThread:1381763 [wandb_init.py:init():800] starting run threads in backend
+2024-08-26 17:57:52,272 INFO    MainThread:1381763 [wandb_run.py:_console_start():2416] atexit reg
+2024-08-26 17:57:52,272 INFO    MainThread:1381763 [wandb_run.py:_redirect():2258] redirect: wrap_raw
+2024-08-26 17:57:52,273 INFO    MainThread:1381763 [wandb_run.py:_redirect():2323] Wrapping output streams.
+2024-08-26 17:57:52,273 INFO    MainThread:1381763 [wandb_run.py:_redirect():2348] Redirects installed.
+2024-08-26 17:57:52,275 INFO    MainThread:1381763 [wandb_init.py:init():843] run started, returning control to user process
+2024-08-26 22:05:15,730 WARNING MsgRouterThr:1381763 [router.py:message_loop():77] message_loop has been closed
